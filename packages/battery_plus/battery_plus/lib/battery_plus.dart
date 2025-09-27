@@ -7,7 +7,7 @@ import 'dart:async';
 import 'package:battery_plus_platform_interface/battery_plus_platform_interface.dart';
 
 export 'package:battery_plus_platform_interface/battery_plus_platform_interface.dart'
-    show BatteryState;
+    show BatteryState, BatteryChangeEvent;
 
 export 'src/battery_plus_linux.dart';
 
@@ -50,7 +50,7 @@ class Battery {
   }
 
   /// Fires whenever the battery state changes.
-  Stream<BatteryState> get onBatteryStateChanged {
+  Stream<BatteryChangeEvent> get onBatteryStateChanged {
     return _platform.onBatteryStateChanged;
   }
 }

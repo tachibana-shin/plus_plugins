@@ -7,7 +7,9 @@ import 'dart:async';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 import 'method_channel_battery_plus.dart';
+import 'src/battery_change_event.dart';
 import 'src/enums.dart';
+export 'src/battery_change_event.dart';
 export 'src/enums.dart';
 
 /// The interface that implementations of Battery must implement.
@@ -53,7 +55,7 @@ abstract class BatteryPlatform extends PlatformInterface {
   }
 
   /// Returns a Stream of BatteryState changes.
-  Stream<BatteryState> get onBatteryStateChanged {
+  Stream<BatteryChangeEvent> get onBatteryStateChanged {
     throw UnimplementedError(
         'get onBatteryStateChanged has not been implemented.');
   }

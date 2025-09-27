@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:meta/meta.dart';
 
 import 'battery_plus_platform_interface.dart';
+import 'src/battery_change_event.dart';
 import 'src/utils.dart';
 
 /// An implementation of [BatteryPlatform] that uses method channels.
@@ -22,7 +23,7 @@ class MethodChannelBattery extends BatteryPlatform {
   EventChannel eventChannel =
       const EventChannel('dev.fluttercommunity.plus/charging');
 
-  Stream<BatteryState>? _onBatteryStateChanged;
+  Stream<BatteryChangeEvent>? _onBatteryStateChanged;
 
   /// Returns the current battery level in percent.
   @override
@@ -44,10 +45,31 @@ class MethodChannelBattery extends BatteryPlatform {
 
   /// Fires whenever the battery state changes.
   @override
-  Stream<BatteryState> get onBatteryStateChanged {
+  Stream<BatteryChangeEvent> get onBatteryStateChanged {
     _onBatteryStateChanged ??= eventChannel
         .receiveBroadcastStream()
-        .map((dynamic event) => parseBatteryState(event));
+        .map((dynamic event) => _parseBatteryChangeEvent(event));
     return _onBatteryStateChanged!;
+  }
+
+  BatteryChangeEvent _parseBatteryChangeEvent(dynamic event) {
+    final eventMap = Map<String, dynamic>.from(event);
+    return BatteryChangeEvent(
+      state: parseBatteryState(eventMap['state'] as String),
+      level: eventMap['level'] as int,
+      isInBatterySaveMode: eventMap['isInBatterySaveMode'] as bool,
+      capacity: eventMap['capacity'] as int?,
+      chargeTimeRemaining: eventMap['chargeTimeRemaining'] as int?,
+      currentAverage: eventMap['currentAverage'] as int?,
+      currentNow: eventMap['currentNow'] as int?,
+      health: eventMap['health'] as String?,
+      pluggedStatus: eventMap['pluggedStatus'] as String?,
+      presence: eventMap['presence'] as String?,
+      scale: eventMap['scale'] as int?,
+      remainingEnergy: eventMap['remainingEnergy'] as int?,
+      technology: eventMap['technology'] as String?,
+      temperature: eventMap['temperature'] as double?,
+      voltage: eventMap['voltage'] as int?,
+    );
   }
 }

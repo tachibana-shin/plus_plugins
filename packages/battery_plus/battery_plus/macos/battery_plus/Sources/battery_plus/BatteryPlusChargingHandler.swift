@@ -1,5 +1,6 @@
 import Foundation
 import FlutterMacOS
+import IOKit.ps
 
 class BatteryPlusChargingHandler: NSObject, FlutterStreamHandler {
 
@@ -26,20 +27,13 @@ class BatteryPlusChargingHandler: NSObject, FlutterStreamHandler {
         stop()
 
         // Gets the initial battery status
-        let initialStatus = getBatteryStatus()
-        if let sink = self.eventSink {
-            sink(initialStatus)
-        }
+        sendBatteryChangeEvent()
 
         // Registers a run loop which is notified when the battery status changes
         let context = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
         source = IOPSNotificationCreateRunLoopSource({ (context) in
             let _self = Unmanaged<BatteryPlusChargingHandler>.fromOpaque(UnsafeRawPointer(context!)).takeUnretainedValue()
-            let status =  _self.getBatteryStatus()
-            print(status)
-            if let sink = _self.eventSink {
-                sink(status)
-            }
+            _self.sendBatteryChangeEvent()
         }, context).takeUnretainedValue()
 
         // Adds loop to source
@@ -82,6 +76,65 @@ class BatteryPlusChargingHandler: NSObject, FlutterStreamHandler {
                 return "discharging"
             }
         }
-        return "UNAVAILABLE"
+        return "unknown"
+    }
+
+    private func getBatteryLevel()-> Int {
+        let powerSourceSnapshot = IOPSCopyPowerSourcesInfo().takeRetainedValue()
+        let sources = IOPSCopyPowerSourcesList(powerSourceSnapshot).takeRetainedValue() as Array
+        if sources.isEmpty {
+            return -1
+        }
+        let description = IOPSGetPowerSourceDescription(powerSourceSnapshot, sources[0]).takeUnretainedValue() as! [String: AnyObject]
+        if let currentCapacity = description[kIOPSCurrentCapacityKey] as? Int {
+            return currentCapacity;
+        }
+        return -1
+    }
+
+    private func isLowPowerModeEnabled()-> Bool {
+        if #available(macOS 12.0, *) {
+            return ProcessInfo.processInfo.isLowPowerModeEnabled
+        } else {
+            // Low Power Mode is not supported on macOS versions prior to 12.0
+            return false
+        }
+    }
+
+    private func sendBatteryChangeEvent() {
+        if let sink = self.eventSink {
+            let powerSourceSnapshot = IOPSCopyPowerSourcesInfo().takeRetainedValue()
+            let sources = IOPSCopyPowerSourcesList(powerSourceSnapshot).takeRetainedValue() as Array
+            if sources.isEmpty {
+                sink(FlutterError(code: "UNAVAILABLE", message: "Battery info unavailable", details: nil))
+                return
+            }
+            let description = IOPSGetPowerSourceDescription(powerSourceSnapshot, sources[0]).takeUnretainedValue() as! [String: AnyObject]
+
+            let status = getBatteryStatus(description: description)
+            let level = getBatteryLevel(description: description)
+            let saveMode = isLowPowerModeEnabled()
+
+            var event: [String: Any] = [
+                "state": status,
+                "level": level,
+                "isInBatterySaveMode": saveMode
+            ]
+
+            event["capacity"] = description[kIOPSMaxCapacityKey] as? Int ?? -1
+            event["chargeTimeRemaining"] = description[kIOPSTimeToFullChargeKey] as? Int ?? -1
+            event["currentAverage"] = -1 // Not available on macOS
+            event["currentNow"] = description[kIOPSAmperageKey] as? Int ?? -1
+            event["health"] = description[kIOPSHealthKey] as? String ?? "unknown"
+            event["pluggedStatus"] = description[kIOPSPowerSourceStateKey] as? String ?? "unknown"
+            event["presence"] = "true" // macOS devices always have a battery
+            event["scale"] = 100
+            event["remainingEnergy"] = -1 // Not available on macOS
+            event["technology"] = "Li-ion" // Assumption
+            event["temperature"] = description[kIOPSTemperatureKey] as? Double ?? -1.0
+            event["voltage"] = description[kIOPSVoltageKey] as? Int ?? -1
+
+            sink(event)
+        }
     }
 }

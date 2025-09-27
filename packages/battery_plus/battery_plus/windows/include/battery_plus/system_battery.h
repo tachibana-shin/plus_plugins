@@ -18,6 +18,10 @@ public:
 
   int GetBatterySaveMode() const;
   int GetLevel() const;
+  int GetChargeTimeRemaining() const;
+
+  std::string GetHealth() const;
+  std::string GetPluggedStatus() const;
 
   BatteryStatus GetStatus() const;
   std::string GetStatusString() const;

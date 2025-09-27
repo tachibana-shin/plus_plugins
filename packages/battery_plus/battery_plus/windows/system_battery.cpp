@@ -52,6 +52,46 @@ int SystemBattery::GetLevel() const {
   return status.BatteryLifePercent;
 }
 
+int SystemBattery::GetChargeTimeRemaining() const {
+  SYSTEM_POWER_STATUS status;
+  if (!GetBatteryStatus(&status) || !IsValidBatteryStatus(&status)) {
+    return -1;
+  }
+  return status.BatteryLifeTime;
+}
+
+std::string SystemBattery::GetHealth() const {
+  SYSTEM_POWER_STATUS status;
+  if (!GetBatteryStatus(&status) || !IsValidBatteryStatus(&status)) {
+    return "unknown";
+  }
+  if (status.BatteryFlag == 0) {
+    return "good";
+  }
+  if (status.BatteryFlag & 1) { // High
+    return "good";
+  }
+  if (status.BatteryFlag & 2) { // Low
+    return "good";
+  }
+  if (status.BatteryFlag & 4) { // Critical
+    return "dead";
+  }
+  return "unknown";
+}
+
+std::string SystemBattery::GetPluggedStatus() const {
+  SYSTEM_POWER_STATUS status;
+  if (!GetBatteryStatus(&status) || !IsValidBatteryStatus(&status)) {
+    return "unknown";
+  }
+  if (status.ACLineStatus == 1) {
+    return "ac";
+  }
+  return "unknown";
+}
+
+
 BatteryStatus SystemBattery::GetStatus() const {
   SYSTEM_POWER_STATUS status;
   if (!GetBatteryStatus(&status)) {

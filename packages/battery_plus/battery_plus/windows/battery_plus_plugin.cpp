@@ -43,7 +43,7 @@ public:
   BatteryStatusStreamHandler(flutter::PluginRegistrarWindows *registrar);
 
 protected:
-  void AddStatusEvent(BatteryStatus status);
+  void AddBatteryChangeEvent();
 
   std::unique_ptr<FlStreamHandlerError>
   OnListenInternal(const flutter::EncodableValue *arguments,
@@ -88,9 +88,31 @@ BatteryStatusStreamHandler::BatteryStatusStreamHandler(
     flutter::PluginRegistrarWindows *registrar)
     : _registrar(registrar) {}
 
-void BatteryStatusStreamHandler::AddStatusEvent(BatteryStatus status) {
-  if (status != BatteryStatus::Error) {
-    _events->Success(_battery.GetStatusString());
+void BatteryStatusStreamHandler::AddBatteryChangeEvent() {
+  if (_battery.GetStatus() != BatteryStatus::Error) {
+    flutter::EncodableMap event;
+    event[flutter::EncodableValue("state")] =
+        flutter::EncodableValue(_battery.GetStatusString());
+    event[flutter::EncodableValue("level")] =
+        flutter::EncodableValue(_battery.GetLevel());
+    event[flutter::EncodableValue("isInBatterySaveMode")] =
+        flutter::EncodableValue(_battery.GetBatterySaveMode() == 1);
+    event[flutter::EncodableValue("capacity")] = flutter::EncodableValue(-1);
+    event[flutter::EncodableValue("chargeTimeRemaining")] =
+        flutter::EncodableValue(_battery.GetChargeTimeRemaining());
+    event[flutter::EncodableValue("currentAverage")] = flutter::EncodableValue(-1);
+    event[flutter::EncodableValue("currentNow")] = flutter::EncodableValue(-1);
+    event[flutter::EncodableValue("health")] =
+        flutter::EncodableValue(_battery.GetHealth());
+    event[flutter::EncodableValue("pluggedStatus")] =
+        flutter::EncodableValue(_battery.GetPluggedStatus());
+    event[flutter::EncodableValue("presence")] = flutter::EncodableValue("true");
+    event[flutter::EncodableValue("scale")] = flutter::EncodableValue(100);
+    event[flutter::EncodableValue("remainingEnergy")] = flutter::EncodableValue(-1);
+    event[flutter::EncodableValue("technology")] = flutter::EncodableValue("unknown");
+    event[flutter::EncodableValue("temperature")] = flutter::EncodableValue(-1.0);
+    event[flutter::EncodableValue("voltage")] = flutter::EncodableValue(-1);
+    _events->Success(event);
   } else {
     _events->Error(std::to_string(_battery.GetError()),
                    _battery.GetErrorString());
@@ -104,8 +126,9 @@ BatteryStatusStreamHandler::OnListenInternal(
   _events = std::move(events);
 
   HWND hwnd = _registrar->GetView()->GetNativeWindow();
-  BatteryStatusCallback callback = std::bind(
-      &BatteryStatusStreamHandler::AddStatusEvent, this, std::placeholders::_1);
+  BatteryStatusCallback callback = [this](BatteryStatus status) {
+    AddBatteryChangeEvent();
+  };
 
   if (!_battery.StartListen(hwnd, callback)) {
     return std::make_unique<FlStreamHandlerError>(
@@ -119,7 +142,7 @@ BatteryStatusStreamHandler::OnListenInternal(
         return std::nullopt;
       });
 
-  AddStatusEvent(_battery.GetStatus());
+  AddBatteryChangeEvent();
   return nullptr;
 }
 

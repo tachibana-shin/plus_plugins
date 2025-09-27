@@ -59,8 +59,8 @@ class BatteryPlusLinuxPlugin extends BatteryPlatform {
 
   /// Fires whenever the battery state changes.
   @override
-  Stream<BatteryState> get onBatteryStateChanged {
-    _stateController ??= StreamController<BatteryState>.broadcast(
+  Stream<BatteryChangeEvent> get onBatteryStateChanged {
+    _stateController ??= StreamController<BatteryChangeEvent>.broadcast(
       onListen: _startListenState,
       onCancel: _stopListenState,
     );
@@ -68,24 +68,43 @@ class BatteryPlusLinuxPlugin extends BatteryPlatform {
   }
 
   UPowerClient? _stateClient;
-  StreamController<BatteryState>? _stateController;
+  StreamController<BatteryChangeEvent>? _stateController;
 
   @visibleForTesting
   // ignore: public_member_api_docs, prefer_function_declarations_over_variables
   UPowerClientFactory createClient = () => UPowerClient();
 
-  void _addState(UPowerDeviceState value) {
-    _stateController!.add(value.toBatteryState());
+  void _addBatteryChangeEvent() {
+    final device = _stateClient!.displayDevice;
+    _stateController!.add(
+      BatteryChangeEvent(
+        state: device.state.toBatteryState(),
+        level: device.percentage.round(),
+        isInBatterySaveMode: device.powerSupply,
+        capacity: (device.energyFull * 1000).round(),
+        chargeTimeRemaining: device.timeToFull.inSeconds,
+        currentAverage: -1,
+        currentNow: (device.energyRate * 1000).round(),
+        health: device.health.toString(),
+        pluggedStatus: device.state.toBatteryState().toString(),
+        presence: device.isPresent.toString(),
+        scale: 100,
+        remainingEnergy: (device.energy * 1000).round(),
+        technology: device.technology.toString(),
+        temperature: device.temperature,
+        voltage: (device.voltage * 1000).round(),
+      ),
+    );
   }
 
   Future<void> _startListenState() async {
     _stateClient ??= createClient();
-    await _stateClient!
-        .connect()
-        .then((_) => _addState(_stateClient!.displayDevice.state));
+    await _stateClient!.connect().then((_) => _addBatteryChangeEvent());
     _stateClient!.displayDevice.propertiesChanged.listen((properties) {
-      if (properties.contains('State')) {
-        _addState(_stateClient!.displayDevice.state);
+      if (properties.contains('State') ||
+          properties.contains('Percentage') ||
+          properties.contains('PowerSupply')) {
+        _addBatteryChangeEvent();
       }
     });
   }

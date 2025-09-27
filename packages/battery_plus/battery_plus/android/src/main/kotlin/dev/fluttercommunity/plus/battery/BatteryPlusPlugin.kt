@@ -90,8 +90,7 @@ class BatteryPlusPlugin : MethodCallHandler, EventChannel.StreamHandler, Flutter
                 IntentFilter(Intent.ACTION_BATTERY_CHANGED), RECEIVER_NOT_EXPORTED
             )
         }
-        val status = getBatteryStatus()
-        publishBatteryStatus(events, status)
+        publishBatteryChangeEvent(events)
     }
 
     override fun onCancel(arguments: Any?) {
@@ -184,8 +183,7 @@ class BatteryPlusPlugin : MethodCallHandler, EventChannel.StreamHandler, Flutter
     private fun createChargingStateChangeReceiver(events: EventSink): BroadcastReceiver {
         return object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
-                publishBatteryStatus(events, convertBatteryStatus(status))
+                publishBatteryChangeEvent(events)
             }
         }
     }
@@ -201,11 +199,72 @@ class BatteryPlusPlugin : MethodCallHandler, EventChannel.StreamHandler, Flutter
         }
     }
 
-    private fun publishBatteryStatus(events: EventSink, status: String?) {
-        if (status != null) {
-            events.success(status)
+    private fun publishBatteryChangeEvent(events: EventSink) {
+        val batteryState = getBatteryStatus()
+        val batteryLevel = getBatteryProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        val isInBatterySaveMode = isInPowerSaveMode()
+
+        if (batteryState != null && isInBatterySaveMode != null) {
+            val event = mutableMapOf<String, Any?>(
+                "state" to batteryState,
+                "level" to batteryLevel,
+                "isInBatterySaveMode" to isInBatterySaveMode
+            )
+
+            val intent = ContextWrapper(applicationContext).registerReceiver(
+                null,
+                IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+            )
+
+            if (intent != null) {
+                event["health"] = getHealth(intent.getIntExtra(BatteryManager.EXTRA_HEALTH, -1))
+                event["pluggedStatus"] = getPluggedStatus(intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1))
+                event["presence"] = intent.getBooleanExtra(BatteryManager.EXTRA_PRESENT, true).toString()
+                event["scale"] = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                event["technology"] = intent.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY)
+                event["temperature"] = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1).toDouble() / 10
+                event["voltage"] = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
+            }
+
+            if (VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
+                event["capacity"] = getBatteryProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                event["currentAverage"] = getBatteryProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE)
+                event["currentNow"] = getBatteryProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
+                event["remainingEnergy"] = getBatteryProperty(BatteryManager.BATTERY_PROPERTY_ENERGY_COUNTER)
+            }
+
+            if (VERSION.SDK_INT >= VERSION_CODES.P) {
+                val chargeTime = getBatteryProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER).toLong()
+                if (chargeTime != 0L) {
+                    event["chargeTimeRemaining"] = chargeTime
+                }
+            }
+
+            events.success(event)
         } else {
-            events.error("UNAVAILABLE", "Charging status unavailable", null)
+            events.error("UNAVAILABLE", "Battery info unavailable", null)
+        }
+    }
+
+    private fun getHealth(health: Int): String {
+        return when (health) {
+            BatteryManager.BATTERY_HEALTH_COLD -> "cold"
+            BatteryManager.BATTERY_HEALTH_DEAD -> "dead"
+            BatteryManager.BATTERY_HEALTH_GOOD -> "good"
+            BatteryManager.BATTERY_HEALTH_OVERHEAT -> "overheat"
+            BatteryManager.BATTERY_HEALTH_OVER_VOLTAGE -> "overVoltage"
+            BatteryManager.BATTERY_HEALTH_UNKNOWN -> "unknown"
+            BatteryManager.BATTERY_HEALTH_UNSPECIFIED_FAILURE -> "unspecifiedFailure"
+            else -> "unknown"
+        }
+    }
+
+    private fun getPluggedStatus(plugged: Int): String {
+        return when (plugged) {
+            BatteryManager.BATTERY_PLUGGED_AC -> "ac"
+            BatteryManager.BATTERY_PLUGGED_USB -> "usb"
+            BatteryManager.BATTERY_PLUGGED_WIRELESS -> "wireless"
+            else -> "unknown"
         }
     }
 
